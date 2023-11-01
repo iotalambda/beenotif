@@ -5,6 +5,9 @@ It scrapes data from a configured web page with JavaScript (powered by [chromedp
 
 This was also a test on how well golang works with Azure Functions. It seems to be working OK.
 
+# Running locally
+`go build -o bin/ && func start`
+
 ## Settings
 
 Here's a sample local.settings.json:
