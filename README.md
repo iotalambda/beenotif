@@ -3,7 +3,7 @@ Web scraper push notification Azure Function implemented with golang.
 
 It scrapes data from a configured web page with JavaScript (powered by [chromedp](https://github.com/chromedp/chromedp)) and delivers any new results in a push notification (powered by [Push Bullet](https://www.pushbullet.com/)).
 
-This was also a test on how well golang works with Azure Functions. It seems to be working OK.
+This was also a test on how well golang works with Azure Functions https://food.joona.cloud/2023/11/03/Deep-dive-to-Azure-Functions-with-golang
 
 ## Running locally
 First run the publish script `./publish.sh`. After that you can re-build and run with `go build -o build/ && func start`.
