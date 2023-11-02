@@ -14,7 +14,7 @@
   },
   "customHandler": {
     "description": {
-      "defaultExecutablePath": "bin/beenotif",
+      "defaultExecutablePath": "build/beenotif",
       "workingDirectory": "",
       "arguments": []
     },

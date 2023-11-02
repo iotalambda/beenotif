@@ -1,8 +1,10 @@
 .vs
+chrome-linux
 
 # Azure Functions artifacts
 bin
 obj
+build
 appsettings.json
 local.settings.json
 

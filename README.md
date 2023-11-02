@@ -5,11 +5,15 @@ It scrapes data from a configured web page with JavaScript (powered by [chromedp
 
 This was also a test on how well golang works with Azure Functions. It seems to be working OK.
 
-# Running locally
-`go build -o bin/ && func start`
+## Running locally
+First run the publish script `./publish.sh`. After that you can re-build and run with `go build -o build/ && func start`.
+
+## Publish to Azure
+Run the publish script `./publish.sh` and then, in VSCode Azure Tools, navigate to your desired subscription's Function App section and choose `Create Function App in Azure... (Advanced)`.
+* Runtime stack = Custom handler
+* OS = Linux
 
 ## Settings
-
 Here's a sample local.settings.json:
 
 ```json

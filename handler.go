@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -19,18 +20,25 @@ import (
 
 func (sc *ServiceContainer) tick() {
 
-	log.Print("Enter tick.")
+	fmt.Print("Enter tick.\n")
 
 configs:
 	for i, config := range sc.Configs {
 
-		log.Printf("Iterating over config %d...", i)
+		fmt.Printf("Iterating over config %d...\n", i)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
 
-		// Query page
-		dpctx, cancel := chromedp.NewContext(ctx)
+		// Query the page
+		allocatorCtx, _ := chromedp.NewExecAllocator(
+			ctx,
+			append([]func(allocator *chromedp.ExecAllocator){
+				chromedp.ExecPath(sc.ChromiumPath),
+			}, chromedp.DefaultExecAllocatorOptions[:]...)...,
+		)
+
+		dpctx, cancel := chromedp.NewContext(allocatorCtx)
 		defer cancel()
 
 		var items []string
@@ -41,14 +49,14 @@ configs:
 		)
 
 		if err != nil {
-			log.Printf("Could not query TargetUrl %s using StringArrayJs %s: %v", config.TargetUrl, config.StringArrayJs, err)
+			fmt.Printf("Could not query TargetUrl %s using StringArrayJs %s: %v\n", config.TargetUrl, config.StringArrayJs, err)
 			return
 		}
 
 		// Read from storage
 		_, err = sc.AzureTablesServiceClient.CreateTable(ctx, config.AzureStorageTableName, nil)
 		if err != nil && !strings.Contains(err.Error(), "TableAlreadyExists") {
-			log.Fatalf("Could not create table %s: %v", config.AzureStorageTableName, err)
+			log.Fatalf("Could not create table %s: %v\n", config.AzureStorageTableName, err)
 		}
 
 		tableClient := sc.AzureTablesServiceClient.NewClient(config.AzureStorageTableName)
@@ -57,7 +65,7 @@ configs:
 		for pager.More() {
 			res, err := pager.NextPage(ctx)
 			if err != nil {
-				log.Printf("Could not query entities from table %s: %v", config.AzureStorageTableName, err)
+				fmt.Printf("Could not query entities from table %s: %v\n", config.AzureStorageTableName, err)
 				break
 			}
 
@@ -65,7 +73,7 @@ configs:
 				var entity aztables.EDMEntity
 				err := json.Unmarshal(bytes, &entity)
 				if err != nil {
-					log.Fatalf("Could not unmarshal an entity from table %s: %v", config.AzureStorageTableName, err)
+					log.Fatalf("Could not unmarshal an entity from table %s: %v\n", config.AzureStorageTableName, err)
 				}
 				existing = append(existing, entity)
 			}
@@ -91,7 +99,7 @@ configs:
 
 		// Notify
 		if len(toNotify) > 0 {
-			log.Printf("Notifying for %d items...", len(toNotify))
+			fmt.Printf("Notifying for %d items...\n", len(toNotify))
 			pushBulletReqBodyMap := map[string]interface{}{
 				"title": config.NotificationTitle,
 				"body":  strings.Join(toNotify, ", "),
@@ -99,42 +107,42 @@ configs:
 			}
 			pushBulletReqBodyBytes, err := json.Marshal(pushBulletReqBodyMap)
 			if err != nil {
-				log.Fatalf("Could not marshal pushBulletReqBodyMap %v: %v", pushBulletReqBodyMap, err)
+				log.Fatalf("Could not marshal pushBulletReqBodyMap %v: %v\n", pushBulletReqBodyMap, err)
 			}
 
 			pushBulletReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "/v2/pushes", bytes.NewBuffer(pushBulletReqBodyBytes))
 			if err != nil {
-				log.Fatalf("Could not create pushBulletReq: %v", err)
+				log.Fatalf("Could not create pushBulletReq: %v\n", err)
 			}
 
 			pushBulletRes, err := sc.PushBulletClient.Do(pushBulletReq)
 			if err != nil {
-				log.Printf("Push Bullet request failed: %v", err)
+				fmt.Printf("Push Bullet request failed: %v\n", err)
 				continue configs
 			}
 
 			if pushBulletRes.StatusCode != 200 {
-				log.Printf("Push Bullet returned an unexpected status code %d.", pushBulletRes.StatusCode)
+				fmt.Printf("Push Bullet returned an unexpected status code %d.\n", pushBulletRes.StatusCode)
 				continue configs
 			}
 		} else {
-			log.Print("Nothing to notify.")
+			fmt.Print("Nothing to notify.\n")
 		}
 
 		// Save to storage
 		if len(toAdd) > 0 {
-			log.Printf("Adding %d items...", len(toAdd))
+			fmt.Printf("Adding %d items...\n", len(toAdd))
 			for _, a := range toAdd {
 				bytes, err := json.Marshal(a)
 				if err != nil {
-					log.Fatalf("Could not marshal entity: %v", err)
+					log.Fatalf("Could not marshal entity: %v\n", err)
 				}
 				tableClient.AddEntity(ctx, bytes, nil)
 			}
 		}
 	}
 
-	log.Print("Exit tick.")
+	fmt.Print("Exit tick.\n")
 }
 
 type Config struct {
@@ -149,6 +157,7 @@ type ServiceContainer struct {
 	Configs                  []Config
 	AzureTablesServiceClient *aztables.ServiceClient
 	PushBulletClient         *http.Client
+	ChromiumPath             string
 }
 
 type PushBulletTransport struct {
@@ -167,9 +176,14 @@ func (t *PushBulletTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 func main() {
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get current working directory: %v.\n", err)
+	}
+
 	azureStorageConnectionString, ok := os.LookupEnv("AzureWebJobsStorage")
 	if !ok {
-		log.Fatal("AzureWebJobsStorage not set.")
+		log.Fatal("AzureWebJobsStorage not set.\n")
 	}
 
 	functionsCustomHandlerPort, ok := os.LookupEnv("FUNCTIONS_CUSTOMHANDLER_PORT")
@@ -179,7 +193,7 @@ func main() {
 
 	pushBulletAccessToken, ok := os.LookupEnv("APP_PUSHBULLETACCESSTOKEN")
 	if !ok {
-		log.Fatal("APP_PUSHBULLETACCESSTOKEN not set.")
+		log.Fatal("APP_PUSHBULLETACCESSTOKEN not set.\n")
 	}
 
 	configs := make([]Config, 0)
@@ -206,7 +220,7 @@ func main() {
 
 		waitSeconds, err := strconv.Atoi(waitSecondsStr)
 		if err != nil {
-			log.Fatalf("Could not parse WAITSECONDS value: %v", err)
+			log.Fatalf("Could not parse WAITSECONDS value: %v\n", err)
 		}
 
 		notificationTitle, ok := os.LookupEnv(fmt.Sprintf("APP_%d_NOTIFICATIONTITLE", i))
@@ -218,18 +232,18 @@ func main() {
 	}
 
 	if len(configs) == 0 {
-		log.Fatal("No configs found.")
+		log.Fatal("No configs found.\n")
 	}
 
 	azureTablesServiceClient, err := aztables.NewServiceClientFromConnectionString(azureStorageConnectionString, nil)
 	if err != nil {
-		log.Fatalf("Could not build Azure Tables service client: %v", err)
+		log.Fatalf("Could not build Azure Tables service client: %v\n", err)
 	}
 
 	pushBulletBaseURLStr := "https://api.pushbullet.com/"
 	pushBulletBaseURL, err := url.Parse(pushBulletBaseURLStr)
 	if err != nil {
-		log.Fatalf("Could not parse pushBulletBaseURLStr %s: %v", pushBulletBaseURLStr, err)
+		log.Fatalf("Could not parse pushBulletBaseURLStr %s: %v\n", pushBulletBaseURLStr, err)
 	}
 
 	pushBulletClient := http.Client{
@@ -239,12 +253,13 @@ func main() {
 			InnerTransport: http.DefaultTransport,
 		}}
 
-	sc := ServiceContainer{configs, azureTablesServiceClient, &pushBulletClient}
+	sc := ServiceContainer{configs, azureTablesServiceClient, &pushBulletClient, path.Join(cwd, "chrome-linux", "chrome")}
 
 	addr := fmt.Sprintf(":%s", functionsCustomHandlerPort)
 
 	http.HandleFunc("/timer", func(w http.ResponseWriter, r *http.Request) {
 		sc.tick()
+		w.WriteHeader(201)
 	})
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
