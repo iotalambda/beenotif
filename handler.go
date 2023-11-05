@@ -259,7 +259,12 @@ func main() {
 
 	http.HandleFunc("/timer", func(w http.ResponseWriter, r *http.Request) {
 		sc.tick()
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
+		_, err = w.Write([]byte("{}"))
+		if err != nil {
+			log.Fatal("Could not write response.")
+		}
 	})
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
